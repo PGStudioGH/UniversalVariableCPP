@@ -1,614 +1,657 @@
 // HEADER
+#define UNIVERSAL_VARIABLE_EXPERIMENTAL_MODE
+#define UNIVERSAL_VARIABLE_ONLY_HEADER
+
+#pragma GCC diagnostic ignored "-Wliteral-suffix"
+
+#pragma region std_includes
+// O------------------------------------------------------------------------------O
+// | STANDARD INCLUDES                                                            |
+// O------------------------------------------------------------------------------O
+#include <vector>
+#include <variant>
+#include <iomanip>
+#include <cstring>
+#include <iostream>
+#include <stdint.h>
 #include <typeinfo>
-#include <typeindex>
 #include <algorithm>
 #include <type_traits>
 #include <initializer_list>
-
-#include <cstring>
-#include <sstream>
-#include <iomanip>
-
-#include <vector>
-
-#include <iostream>
-
-#pragma region typedefs
-
-typedef class UniversalVariable var;
-
 #pragma endregion
 
-#pragma region global_variables
-
-enum { 
-    __REAL      = 0, 
-    __TEXT      = 1, 
-    __ARRAY     = 2,
-    __POINTER   = 3,
-};
-
-enum {
-    __IS_CALLABLE           = 0x01,
-    __IS_RETURN_FUNCTION    = 0x02,
-};
-
-std::ostringstream __str;
-std::vector<const std::type_info*> __type_names = {  };
-
-bool __isSameTypeArgs;
-unsigned long long __index_args;
-unsigned long long __count_tab = 0;
-
-#pragma endregion
-
-#pragma region meta_programming
-
-#define __GET_FLAG(FLAGS, FLAG) (bool)(FLAGS & FLAG)
-#define __SET_FLAG(FLAGS, FLAG, TOGGLE) TOGGLE ? FLAGS |= FLAG : FLAGS &= ~FLAG
-
-template<class T, class... Args>
-struct __is_same_type : std::bool_constant<(std::is_same_v<T, Args> || ...)> {};
-template<class T, class... Args>
-inline constexpr bool __is_same_type_v = __is_same_type<T, Args...>::value;
-
-template <typename T>
-struct __return_type { using type = T; };
-template <typename R, typename... Args>
-struct __return_type<R(Args...)> { using type = R; };
-template <typename R, typename... Args>
-struct __return_type<R(*)(Args...)> { using type = R; };
-template <typename T>
-using __return_type_t = typename __return_type<T>::type;
-
-#pragma endregion
-
-#pragma region functions_for_universal_variable
-
-UniversalVariable operator "" _v(long double data);
-UniversalVariable operator "" _v(unsigned long long int data);
-UniversalVariable operator "" _v(const char* str, std::size_t len);
-std::ostream& operator<<(std::ostream& out, const UniversalVariable& variable);
-std::ostream& operator<<(std::ostream& out, const std::vector<UniversalVariable>& data);
-
-#pragma endregion
-
-class UniversalVariable
+// O------------------------------------------------------------------------------O
+// | uv::UniversalVariable INTERFACE DECLARATION                                  |
+// O------------------------------------------------------------------------------O
+#pragma region uv_declaration
+namespace uv
 {
+    typedef std::size_t size_uv;
 
-#pragma region constructor_and_deconstructor
+    class UniversalVariable;
 
-public:
-    UniversalVariable()
+    UniversalVariable operator "" v(long double data);
+    UniversalVariable operator "" v(unsigned long long int data);
+    UniversalVariable operator "" v(const char* str, std::size_t len);
+
+    void printType(const UniversalVariable& variable);
+    std::ostream& operator<<(std::ostream& out, const UniversalVariable& variable);
+    std::ostream& operator<<(std::ostream& out, const std::vector<UniversalVariable>& array);
+
+#ifdef UNIVERSAL_VARIABLE_EXPERIMENTAL_MODE
+    template<typename T> T get(const UniversalVariable& variable);
+#endif
+
+    namespace metaprogramming_declaration
+    {
+        using supported_types = std::variant<long double, std::string, std::vector<UniversalVariable>, void*>;
+    }
+
+    // O------------------------------------------------------------------------------O
+    // | uv::UniversalVariable - A dynamic and implicit typing variable               |
+    // O------------------------------------------------------------------------------O
+    class UniversalVariable
+    {
+    public:
+        UniversalVariable();
+        UniversalVariable(const UniversalVariable& variable);
+        UniversalVariable(const std::initializer_list<UniversalVariable>& array);
+        template<typename T> UniversalVariable(const T& data);
+        ~UniversalVariable();
+
+    public:
+        bool isSameType(const UniversalVariable& variable);
+        template<typename T> bool isSameType(const T& data);
+        
+    public:
+        UniversalVariable& operator=(const UniversalVariable& variable);
+        template<typename T> UniversalVariable& operator=(const T& data);
+
+    public:
+        UniversalVariable& operator[](size_uv index);
+        size_uv size();
+
+    public:
+        bool isCallable();
+        template<typename... Args> UniversalVariable operator()(Args... args);
+    private:
+        template<typename R> void _writeArgs(R f());
+        template<typename R, typename First, typename... Rest> void _writeArgs(R f(First, Rest...));
+        void _readArgs();
+        template<typename First> void _readArgs(First first);
+        template<typename First, typename... Rest> void _readArgs(First first, Rest... rest);
+
+    public:
+        unsigned int _flags = 0;
+        size_uv _type;
+        size_uv _type_from_list_types;
+        size_uv _size_of_allocated_data = 0;
+        metaprogramming_declaration::supported_types _data;
+
+        size_uv _count_args;
+        std::vector<const std::type_info*> _list_args;
+
+        friend void printType(const UniversalVariable& variable);
+        friend std::ostream& operator<<(std::ostream& out, const UniversalVariable& variable);
+        friend std::ostream& operator<<(std::ostream& out, const std::vector<UniversalVariable>& array);
+
+    #ifdef UNIVERSAL_VARIABLE_EXPERIMENTAL_MODE
+        template<typename T> friend T get(const UniversalVariable& variable);
+    #endif
+    };
+}
+
+typedef class uv::UniversalVariable var;
+#pragma endregion
+
+#ifdef UNIVERSAL_VARIABLE_ONLY_HEADER
+// O------------------------------------------------------------------------------O
+// | uv::UniversalVariable INTERNAL DECLARATION FOR SINGLE HEADER                 |
+// O------------------------------------------------------------------------------O
+#pragma region uv_internal_declaration
+namespace uv
+{
+    namespace internal_declaration
+    {
+        enum {
+            REAL            = 0, 
+            TEXT            = 1, 
+            ARRAY           = 2,
+            POINTER         = 3,
+            UNKNOWN_TYPE    = 4,
+        };
+        enum {
+            IS_CALLABLE_FUNCTION    = 0x01,
+            IS_RETURN_FUNCTION      = 0x02,
+        };
+        static size_uv index_arg = 0;
+        static bool is_same_type_arg = 0;
+        static std::vector<const std::type_info*> list_types = { };
+
+        static size_uv count_indent = 0;
+
+        std::ostream& showHexData(std::ostream& out, const void* pointer, unsigned int size);
+        std::ostream& showListArgs(std::ostream& out, const std::vector<const std::type_info*>& list_args);
+
+        void error_failed_indexing_out_range();
+        void error_failed_indexing_not_array();
+        void error_failed_call_different_args(const std::vector<const std::type_info*>& list_args);
+        void error_failed_call_not_match_count_args(const std::vector<const std::type_info*>& list_args);
+        void error_failed_call_unsupported_return_type();
+
+    #ifdef UNIVERSAL_VARIABLE_EXPERIMENTAL_MODE
+        std::stringstream str;
+        template<typename T> std::string to_string(const T& data);
+        void error_failed_getting_not_match_type();
+    #endif
+    }
+    namespace metaprogramming_declaration
+    {
+        inline bool getFlag(unsigned int flags, unsigned int flag) { return flags & flag; }
+        inline void setFlag(unsigned int& flags, unsigned int flag, bool toggle) { toggle ? flags |= flag : flags &= ~flag; }
+
+        template<typename T, typename... Args> struct is_same_type : std::bool_constant<(std::is_same_v<T, Args> || ...)> {};
+        template<typename T, typename... Args> inline constexpr bool is_same_type_v = is_same_type<T, Args...>::value;
+
+        template<typename T> struct get_type_return { using type = T; };
+        template<typename R, typename... Args> struct get_type_return<R(Args...)> { using type = R; };
+        template<typename R, typename... Args> struct get_type_return<R(*)(Args...)> { using type = R; };
+        template<typename T> using get_type_return_t = typename get_type_return<T>::type;
+
+        template<typename T> inline constexpr bool is_arithmetic_v =
+            std::is_arithmetic_v<T>;
+        template<typename T> inline constexpr bool is_bool_v =
+            is_same_type_v<T, bool>;
+        template<typename T> inline constexpr bool is_symbol_v =
+            is_same_type_v<T, char, unsigned char>;
+        template<typename T> inline constexpr bool is_real_v =
+            is_arithmetic_v<T> && not is_bool_v<T> && not is_symbol_v<T>;
+        template<typename T> inline constexpr bool is_text_v =
+            is_same_type_v<T, char[sizeof(get_type_return_t<T>)], const char*>;
+        template<typename T> inline constexpr bool is_std_text_v =
+            is_same_type_v<T, std::string>;
+        template<typename T> inline constexpr bool is_array_v =
+            std::is_array_v<T>;
+        template<typename T> inline constexpr bool is_std_array_v =
+            is_same_type_v<T, std::vector<UniversalVariable>, std::initializer_list<UniversalVariable>>;
+        template<typename T> inline constexpr bool is_function_v =
+            std::is_function_v<typename std::remove_pointer_t<T>>;
+        template<typename T> inline constexpr bool is_return_callback_v =
+            is_same_type_v<get_type_return_t<T>, UniversalVariable>;
+        template<typename T> inline constexpr bool is_supported_callback_v =
+            is_same_type_v<get_type_return_t<T>, void, UniversalVariable>;
+        template<typename T> inline constexpr bool is_pointer_v =
+            std::is_pointer_v<T>;
+    }
+}
+#pragma endregion
+
+// O------------------------------------------------------------------------------O
+// | uv::UniversalVariable INTERFACE IMPLEMENTATION FOR SINGLE HEADER             |
+// O------------------------------------------------------------------------------O
+#pragma region uv_implementation
+namespace uv
+{
+    namespace id = internal_declaration;
+    namespace md = metaprogramming_declaration;
+
+    UniversalVariable::UniversalVariable()
     {
         *this = "NULL";
     }
-    UniversalVariable(const UniversalVariable& data)
+    UniversalVariable::UniversalVariable(const UniversalVariable& variable)
     {
-        _flags = data._flags;
-        _type = data._type;
-        _unknown_type = data._unknown_type;
-        _size_of_allocated_data = data._size_of_allocated_data;
-        _data = data._data;
-        _text = data._text;
-        _array = data._array;
-        if (_size_of_allocated_data > 0)
-        {
-            _allocated_data = malloc(_size_of_allocated_data);
-            memcpy(_allocated_data, data._allocated_data, _size_of_allocated_data);
-        }
-        _count_args = data._count_args;
-        _type_args = data._type_args;
+        *this = variable;
     }
-    UniversalVariable(const std::initializer_list<UniversalVariable>& data)
+    UniversalVariable::UniversalVariable(const std::initializer_list<UniversalVariable>& array)
+    {
+        *this = array;
+    }
+    template<typename T> UniversalVariable::UniversalVariable(const T& data)
     {
         *this = data;
     }
-    template<typename T> UniversalVariable(const T& data)
+    UniversalVariable::~UniversalVariable()
     {
-        *this = data;
-    }
-    ~UniversalVariable()
-    {
-        if (_size_of_allocated_data > 0) {
-            free(_allocated_data);
+        if (this->_size_of_allocated_data > 0) {
+            free(std::get<id::POINTER>(this->_data));
         }
     }
 
-#pragma endregion
-
-#pragma region isSameType_and_load
-
-public:
-    template<typename T> bool isSameType(const T& data)
+    bool UniversalVariable::isSameType(const UniversalVariable& variable)
     {
-        if constexpr (__is_same_type_v<T, UniversalVariable>)
-            return _type == data._type;
-        if constexpr (__is_same_type_v<T, bool>)
-            return _type == __TEXT && (_text == "true" || _text == "false");
-        else if constexpr (__is_same_type_v<T, char, unsigned char, std::string>)
-            return _type == __TEXT;
-        else if constexpr (__is_same_type_v<T, short, int, long, long long, float, double, long double,
-                            unsigned short, unsigned int, unsigned long, unsigned long long>)
-            return _type == __REAL;
-        else if constexpr (__is_same_type_v<T, std::vector<UniversalVariable>, std::initializer_list<UniversalVariable>>)
-            return _type == __ARRAY;
-        else {
-            auto search = std::find(__type_names.begin(), __type_names.end(), &typeid(data));
-            return search != __type_names.end() && _unknown_type == search - __type_names.begin();
+        const bool is_same_type = this->_type == variable._type;
+        const bool is_same_unknown_type = this->_type_from_list_types == variable._type_from_list_types;
+        return is_same_type && (this->_type == id::UNKNOWN_TYPE ? is_same_unknown_type : 1);
+    }
+    template<typename T> bool UniversalVariable::isSameType(const T& data)
+    {
+        if constexpr (md::is_real_v<T>) {
+            return this->_type == id::REAL;
+        } else if constexpr (md::is_bool_v<T>) {
+            return this->_type == id::TEXT && (std::get<id::TEXT>(this->_data) == "true" || std::get<id::TEXT>(this->_data) == "false");
+        } else if constexpr (md::is_symbol_v<T> || md::is_text_v<T> || md::is_std_text_v<T>) {
+            return this->_type == id::TEXT;
+        } else if constexpr (md::is_array_v<T> || md::is_std_array_v<T>) {
+            return this->_type == id::ARRAY;
+        } else {
+            auto search = std::find(id::list_types.begin(), id::list_types.end(), &typeid(data));
+            return search != id::list_types.end() && this->_type_from_list_types == search - id::list_types.begin();
         }
     }
 
-    template<typename T, class... Args> void load(T& data)
+    UniversalVariable& UniversalVariable::operator=(const UniversalVariable& variable)
     {
-        if constexpr (__is_same_type_v<T, UniversalVariable>)
-            data = *this;
-        else if constexpr (__is_same_type_v<T, bool>) {
-            if (_type == __REAL)
-                data = (int)_data._real % 2;
-            else if (_type == __TEXT)
-                data = _text == "true";
-            else
-                data = false;
+        this->_flags = variable._flags;
+        this->_type = variable._type;
+        this->_type_from_list_types = variable._type_from_list_types;
+        if (this->_size_of_allocated_data > 0) {
+            free(std::get<id::POINTER>(this->_data));
         }
-        else if constexpr (__is_same_type_v<T, char, unsigned char>) {
-            if (_type == __REAL) {
-                __str.clear();
-                __str << std::setprecision(16) << _data._real;
-                data = __str.str()[0];
-            }
-            else if (_type == __TEXT)
-                data = _text[0];
-            else
-                data = 0;
+        this->_size_of_allocated_data = variable._size_of_allocated_data;
+        if (this->_size_of_allocated_data > 0) {
+            std::get<id::POINTER>(this->_data) = malloc(this->_size_of_allocated_data);
+            memcpy(std::get<id::POINTER>(this->_data), std::get<id::POINTER>(variable._data), this->_size_of_allocated_data );
+        } else {
+            this->_data = variable._data;
         }
-        else if constexpr (__is_same_type_v<T, std::string>) {
-            if (_type == __REAL) {
-                __str.clear();
-                __str << std::setprecision(16) << _data._real;
-                data = __str.str();
-            }
-            else if (_type == __TEXT)
-                data = _text;
-            else
-                data = "";
-        }
-        else if constexpr (__is_same_type_v<T, short, unsigned short, int, unsigned int>) {
-            if (_type == __REAL)
-                data = _data._real;
-            else if (_type == __TEXT)
-                data = std::stoi(_text.c_str());
-            else
-                data = 0;
-        }
-        else if constexpr (__is_same_type_v<T, long, unsigned long>) {
-            if (_type == __REAL)
-                data = _data._real;
-            else if (_type == __TEXT)
-                data = std::stol(_text.c_str());
-            else
-                data = 0;
-        }
-        else if constexpr (__is_same_type_v<T, long long, unsigned long long>) {
-            if (_type == __REAL)
-                data = _data._real;
-            else if (_type == __TEXT)
-                data = std::stoll(_text.c_str());
-            else
-                data = 0;
-        }
-        else if constexpr (__is_same_type_v<T, float>) {
-            if (_type == __REAL)
-                data = _data._real;
-            else if (_type == __TEXT)
-                data = std::stof(_text.c_str());
-            else
-                data = 0;
-        }
-        else if constexpr (__is_same_type_v<T, double>) {
-            if (_type == __REAL)
-                data = _data._real;
-            else if (_type == __TEXT)
-                data = std::stod(_text.c_str());
-            else
-                data = 0;
-        }
-        else if constexpr (__is_same_type_v<T, long double>) {
-            if (_type == __REAL)
-                data = _data._real;
-            else if (_type == __TEXT)
-                data = std::stold(_text.c_str());
-            else
-                data = 0;
-        }
-        else if constexpr (__is_same_type_v<T, std::vector<UniversalVariable>>) {
-            if (_type == __ARRAY)
-                data = _array;
-            else
-                data = std::vector<UniversalVariable>({ *this });
-        }
-        else if constexpr (std::is_function_v<typename std::remove_pointer<T>::type>) {
-            if constexpr (std::is_pointer_v<T>) {
-                if (isSameType(*data))
-                    data = T(_data._pointer);
-                else {
-                    std::cout << "\nFailed load!\n";
-                    std::cout << "Reason: Type of input variable does not match!\n";
-                    std::cout << "Please check type before operator using `IsSameType(...)`\n\n";
-                    std::exit(1);
-                }
-            }
-            else {
-                std::cout << "\nFailed load!\n";
-                std::cout << "Reason: You should not load to address function!\n\n";
-                std::exit(1);
-            }
-        }
-        else {
-            if (isSameType(data))
-                data = *(T*)_data._pointer;
-            else {
-                std::cout << "\nFailed load!\n";
-                std::cout << "Reason: Type of input variable does not match!\n";
-                std::cout << "Please check type before operator using `IsSameType(...)`\n\n";
-                std::exit(1);
-            }
-        }
-    }
-
-#pragma endregion
-
-#pragma region operator_assign
-
-public:
-    UniversalVariable& operator=(const UniversalVariable& data)
-    {
-        _flags = data._flags;
-        _type = data._type;
-        _unknown_type = data._unknown_type;
-        _size_of_allocated_data = data._size_of_allocated_data;
-        _data = data._data;
-        _text = data._text;
-        _array = data._array;
-        if (_size_of_allocated_data > 0)
-        {
-            _allocated_data = malloc(_size_of_allocated_data);
-            memcpy(_allocated_data, data._allocated_data, _size_of_allocated_data);
-        }
-        _count_args = data._count_args;
-        _type_args = data._type_args;
+        this->_count_args = variable._count_args;
+        this->_list_args = variable._list_args;
         return *this;
     }
-    template<typename T> UniversalVariable& operator=(const T& data)
+    template<typename T> UniversalVariable& UniversalVariable::operator=(const T& data)
     {
-        if (_size_of_allocated_data > 0) {
-            free(_allocated_data);
-            _size_of_allocated_data = 0;
+        md::setFlag(this->_flags, id::IS_CALLABLE_FUNCTION, false);
+        if (this->_size_of_allocated_data > 0) {
+            free(std::get<id::POINTER>(this->_data));
+            this->_size_of_allocated_data = 0;
         }
 
-        if constexpr (__is_same_type_v<T, bool>) {
-            __SET_FLAG(_flags, __IS_CALLABLE, false);
-            _type = __TEXT;
-            _text = data ? "true" : "false";
-        }
-        else if constexpr (__is_same_type_v<T, char, unsigned char, char[sizeof(__return_type_t<T>)], const char[sizeof(__return_type_t<T>)], char*, const char*, std::string>) {
-            __SET_FLAG(_flags, __IS_CALLABLE, false);
-            _type = __TEXT;
-            _text = data;
-        }
-        else if constexpr (__is_same_type_v<T, short, int, long, long long, float, double, long double,
-                            unsigned short, unsigned int, unsigned long, unsigned long long>) {
-            __SET_FLAG(_flags, __IS_CALLABLE, false);
-            _type = __REAL;
-            _data._real = data;
-        }
-        else if constexpr (__is_same_type_v<T, std::vector<UniversalVariable>, std::initializer_list<UniversalVariable>>) {
-            __SET_FLAG(_flags, __IS_CALLABLE, false);
-            _type = __ARRAY;
-            _array = data;
-        }
-        else if constexpr (__is_same_type_v<T, std::remove_extent_t<__return_type_t<T>>[sizeof(__return_type_t<T>) / sizeof(std::remove_extent_t<__return_type_t<T>>)]>) {
-            __SET_FLAG(_flags, __IS_CALLABLE, false);
-            _type = __ARRAY;
-            _array.clear();
-            for (unsigned int i = 0; i < sizeof(T) / sizeof(std::remove_extent_t<T>); i++)
-                _array.push_back(data[i]);
-        }
-        else if constexpr (std::is_function_v<typename std::remove_pointer<T>::type>) {
-            if constexpr (__is_same_type_v<__return_type_t<T>, UniversalVariable>)
-                __SET_FLAG(_flags, __IS_RETURN_FUNCTION, true);
-            if constexpr (__is_same_type_v<__return_type_t<T>, void, UniversalVariable>) {
-                __SET_FLAG(_flags, __IS_CALLABLE, true);
-                _count_args = 0;
-                _type_args.clear();
-                writeArgs(data);
+        if constexpr (md::is_real_v<T>) {
+            this->_type = id::REAL;
+            std::variant_alternative_t<id::REAL, md::supported_types> temp = data;
+            this->_data = temp;
+        } else if constexpr (md::is_bool_v<T>) {
+            this->_type = id::TEXT;
+            std::variant_alternative_t<id::TEXT, md::supported_types> temp = data ? "true" : "false";
+            this->_data = temp;
+        } else if constexpr (md::is_symbol_v<T> || md::is_text_v<T> || md::is_std_text_v<T>) {
+            this->_type = id::TEXT;
+            std::variant_alternative_t<id::TEXT, md::supported_types> temp = data;
+            this->_data = temp;
+        } else if constexpr (md::is_array_v<T>) {
+            this->_type = id::ARRAY;
+            std::variant_alternative_t<id::ARRAY, md::supported_types> temp = { };
+            this->_data = temp;
+            for (size_uv i = 0; i < sizeof(T) / sizeof(std::remove_extent_t<T>); i++) {
+                std::get<id::ARRAY>(this->_data).push_back(data[i]);
             }
-            else __SET_FLAG(_flags, __IS_CALLABLE, false);
-
-            auto search = std::find(__type_names.begin(), __type_names.end(), &typeid(typename std::remove_pointer<T>::type));
-            if (search == __type_names.end()) {
-                __type_names.push_back(&typeid(typename std::remove_pointer<T>::type));
-                search = __type_names.end() - 1;
+        } else if constexpr (md::is_std_array_v<T>) {
+            this->_type = id::ARRAY;
+            std::variant_alternative_t<id::ARRAY, md::supported_types> temp = data;
+            this->_data = temp;
+        } else if constexpr (md::is_function_v<T>) {
+            md::setFlag(this->_flags, id::IS_RETURN_FUNCTION, md::is_return_callback_v<T>);
+            md::setFlag(this->_flags, id::IS_CALLABLE_FUNCTION, md::is_supported_callback_v<T>);
+            if constexpr (md::is_supported_callback_v<T>) {
+                this->_count_args = 0;
+                this->_list_args.clear();
+                _writeArgs(data);
             }
-            _unknown_type = search - __type_names.begin();
-            _data._pointer = (void*)data;
-        }
-        else {
-            __SET_FLAG(_flags, __IS_CALLABLE, false);
-            auto search = std::find(__type_names.begin(), __type_names.end(), &typeid(data));
-            if (search == __type_names.end()) {
-                __type_names.push_back(&typeid(data));
-                search = __type_names.end() - 1;
+            auto search = std::find(id::list_types.begin(), id::list_types.end(), &typeid(typename std::remove_pointer_t<T>));
+            if (search == id::list_types.end()) {
+                id::list_types.push_back(&typeid(typename std::remove_pointer_t<T>));
+                search = id::list_types.end() - 1;
             }
-            _unknown_type = search - __type_names.begin();
-            if constexpr (std::is_pointer_v<T>) {
-                _type = __POINTER;
-                _data._pointer = (void*)data;
+            this->_type = id::POINTER;
+            this->_type_from_list_types = search - id::list_types.begin();
+            this->_data = reinterpret_cast<void*>(data);
+        } else {
+            auto search = std::find(id::list_types.begin(), id::list_types.end(), &typeid(data));
+            if (search == id::list_types.end()) {
+                id::list_types.push_back(&typeid(data));
+                search = id::list_types.end() - 1;
             }
-            else {
-                _size_of_allocated_data = sizeof(T);
-                _allocated_data = malloc(sizeof(T));
-                memcpy(_allocated_data, &data, sizeof(T));
+            this->_type_from_list_types = search - id::list_types.begin();
+            if constexpr (md::is_pointer_v<T>) {
+                this->_type = id::POINTER;
+                this->_data = reinterpret_cast<void*>(data);
+            } else {
+                this->_type = id::UNKNOWN_TYPE;
+                this->_size_of_allocated_data = sizeof(T);
+                this->_data = malloc(sizeof(T));
+                memcpy(std::get<id::POINTER>(this->_data), &data, sizeof(T));
             }
         }
         return *this;
     }
 
-#pragma endregion
-
-#pragma region operator_index
-
-public:
-    UniversalVariable& operator[](unsigned long long int index)
+    UniversalVariable& UniversalVariable::operator[](size_uv index)
     {
-        if (_type == __ARRAY) {
-            if (index < _array.size())
-                return _array[index];
-            else {
-                std::cout << "\nFailed indexing!\n";
-                std::cout << "Reason: Index out of array range!\n";
-                std::cout << "Please check size of array using `size()`\n\n";
-                std::exit(1);
+        if (this->_type == id::ARRAY) {
+            if (index < std::get<id::ARRAY>(this->_data).size()) {
+                return std::get<id::ARRAY>(this->_data)[index];
+            } else {
+                id::error_failed_indexing_out_range();
             }
-        } 
-        else if (index == 0)
+        } else if (index == 0) {
             return *this;
-        else {
-            std::cout << "\nFailed indexing!\n";
-            std::cout << "Reason: This variable is not an array!\n";
-            std::cout << "Please use index zero, it will work\n\n";
-            std::exit(1);
+        } else {
+            id::error_failed_indexing_not_array();
         }
+        return *this;
+    }
+    size_uv UniversalVariable::size()
+    {
+        return (this->_type == id::ARRAY) ? (std::get<id::ARRAY>(this->_data).size()) : (1);
     }
 
-#pragma endregion
-
-#pragma region operator_call_function
-
-private:
-    template<class R> void _writeArgs(R f())
+    template<typename... Args> UniversalVariable UniversalVariable::operator()(Args... args)
     {
-        return;
-    }
-    template<class R, class First, class... Rest> void _writeArgs(R f(First, Rest...))
-    {
-        _type_args.push_back(&typeid(First));
-        _count_args++;
-
-        R (*temp)(Rest...);
-        _writeArgs(temp);
-    }
-    template<class First> void _readArgs(First first)
-    {
-        __isSameTypeArgs = (&typeid(first) == _type_args[__index_args]);
-    }
-    template<class First, class... Rest> void _readArgs(First first, Rest... rest)
-    {
-        __isSameTypeArgs = (&typeid(first) == _type_args[__index_args]);
-        __index_args++;
-        if (__isSameTypeArgs)
-            _readArgs(rest...);
-    }
-
-public:
-    template<class... Args> UniversalVariable operator()(Args... args)
-    {
-        if (__GET_FLAG(_flags, __IS_CALLABLE) == true) {
-            if (sizeof...(args) == _count_args) {
-                __isSameTypeArgs = 1;
-                if (_count_args != 0) {
-                    __index_args = 0;
+        if (md::getFlag(this->_flags, id::IS_CALLABLE_FUNCTION)) {
+            if (sizeof...(args) == this->_count_args) {
+                id::is_same_type_arg = 1;
+                if (this->_count_args != 0) {
+                    id::index_arg = 0;
                     _readArgs(args...);
                 }
 
-                if (__isSameTypeArgs) {
-                    if (__GET_FLAG(_flags, __IS_RETURN_FUNCTION) == true)
-                        return ((UniversalVariable(*)(Args...))_data._pointer)(args...);
-                    else {
-                        ((void(*)(Args...))_data._pointer)(args...);
+                if (id::is_same_type_arg == true) {
+                    if (md::getFlag(this->_flags, id::IS_RETURN_FUNCTION)) {
+                        return ((UniversalVariable(*)(Args...))std::get<id::POINTER>(this->_data))(args...);
+                    } else {
+                        ((void(*)(Args...))std::get<id::POINTER>(this->_data))(args...);
                     }
+                } else {
+                    id::error_failed_call_different_args(this->_list_args);
                 }
-                else {
-                    std::cout << "\nFailed calling function!\n";
-                    std::cout << "Reason: Different type of arguments passing!\n";
-                    std::cout << "Arguments function: ";
-                    if (_type_args.size() == 0)
-                        std::cout << "empty\n";
-                    else {
-                        auto it = _type_args.begin();
-                        while (it != _type_args.end() - 1) {
-                            std::cout << (*it)->name() << ", ";
-                            it++;
-                        }
-                        std::cout << (*it)->name() << "\n";
-                    }
-                    std::exit(1);
-                }
+            } else {
+                id::error_failed_call_not_match_count_args(this->_list_args);
             }
-            else {
-                std::cout << "\nFailed calling function!\n";
-                std::cout << "Reason: Count of arguments does not match!\n";
-                std::cout << "Arguments function: ";
-                if (_type_args.size() == 0)
-                    std::cout << "empty\n";
-                else {
-                    auto it = _type_args.begin();
-                    while (it != _type_args.end() - 1) {
-                        std::cout << (*it)->name() << ", ";
-                        it++;
-                    }
-                    std::cout << (*it)->name() << "\n";
-                }
-                std::exit(1);
-            }
+        } else {
+            id::error_failed_call_unsupported_return_type();
         }
-        else {
-            std::cout << "\nFailed calling function!\n";
-            std::cout << "Reason: This variable is not a void function or a return function!\n";
-            std::cout << "Support return function: var (UniversalVariable). Please check using `isCallFunction()`\n";
+        return "NULL";
+    }
+    bool UniversalVariable::isCallable()
+    {
+        return md::getFlag(this->_flags, id::IS_CALLABLE_FUNCTION);
+    }
+    template<typename R> void UniversalVariable::_writeArgs(R f())
+    {
+        return;
+    }
+    template<typename R, typename First, typename... Rest> void UniversalVariable::_writeArgs(R f(First, Rest...))
+    {
+        this->_list_args.push_back(&typeid(First));
+        this->_count_args++;
+        R (*temp)(Rest...);
+        _writeArgs(temp);
+    }
+    void UniversalVariable::_readArgs()
+    {
+        return;
+    }
+    template<typename First> void UniversalVariable::_readArgs(First first)
+    {
+        id::is_same_type_arg = (&typeid(first) == this->_list_args[id::index_arg]);
+    }
+    template<typename First, typename... Rest> void UniversalVariable::_readArgs(First first, Rest... rest)
+    {
+        id::is_same_type_arg = (&typeid(first) == this->_list_args[id::index_arg]);
+        id::index_arg++;
+        if (id::is_same_type_arg) {
+            _readArgs(rest...);
+        }
+    }
+
+    UniversalVariable operator "" v(long double data)
+    {
+        return UniversalVariable(data);
+    }
+    UniversalVariable operator "" v(unsigned long long int data)
+    {
+        return UniversalVariable(data);
+    }
+    UniversalVariable operator "" v(const char* str, std::size_t len)
+    {
+        return UniversalVariable(str);
+    }
+
+    void printType(const UniversalVariable& variable)
+    {
+        std::cout << "\nThis variable is ";
+        switch (variable._type) {
+        case id::REAL:
+            std::cout << "number\n";
+            break;
+        case id::TEXT:
+            std::cout << "text\n";
+            break;
+        case id::ARRAY:
+            std::cout << "array (list)\n";
+            break;
+        case id::POINTER:
+            std::cout << "pointer (" << id::list_types[variable._type_from_list_types]->name() << ")\n";
+            break;
+        default:
+            std::cout << "unknown type (" << id::list_types[variable._type_from_list_types]->name() << ")\n";
+        }
+    }
+    std::ostream& operator<<(std::ostream& out, const UniversalVariable& variable)
+    {
+        switch (variable._type) {
+        case id::REAL:
+            return out << std::get<id::REAL>(variable._data);
+        case id::TEXT:
+            return out << std::get<id::TEXT>(variable._data);
+        case id::ARRAY:
+            return out << std::get<id::ARRAY>(variable._data);
+        case id::POINTER:
+            return out << std::get<id::POINTER>(variable._data);
+        default:
+            out << id::showHexData(out, std::get<id::POINTER>(variable._data), variable._size_of_allocated_data);
+            return out << " (" << id::list_types[variable._type_from_list_types]->name() << ")";
+        }
+    }
+    std::ostream& operator<<(std::ostream& out, const std::vector<UniversalVariable>& data)
+    {
+        id::count_indent++;
+        out << "List: {\n";
+        for (auto it = data.begin(); it != data.end(); it++) {
+            for (size_uv i = 0; i < id::count_indent; i++) {
+                out << "  ";
+            }
+            out << ((it->_type == id::TEXT) ? ("\"") : ("")) << *it << ((it->_type == id::TEXT) ? ("\"") : ("")) << ((it != data.end() - 1) ? (",\n") : ("\n"));
+        }
+        id::count_indent--;
+        for (size_uv i = 0; i < id::count_indent; i++) {
+            out << "  ";
+        }
+        return out << "}";
+    }
+    std::ostream& id::showHexData(std::ostream& out, const void* pointer, unsigned int size)
+    {
+        id::count_indent++;
+        out << "Data: {\n";
+        unsigned char hex[3]{};
+        unsigned int i = 0;
+        while (i < size) {
+            for (size_uv i = 0; i < id::count_indent; i++) {
+                out << "  ";
+            }
+            for (unsigned int j = 0; i < size, j < 4; i++, j++) {
+                hex[0] = (0xF & ((const char*)pointer)[i] >> 4) + 48;
+                hex[1] = (0xF & ((const char*)pointer)[i]) + 48;
+                if (hex[0] > 57) hex[0] += 7;
+                if (hex[1] > 57) hex[1] += 7;
+                out << hex;
+            }
+            out << ((i < size - 1) ? (",\n") : ("\n"));
+        }
+        id::count_indent--;
+        for (size_uv i = 0; i < id::count_indent; i++) {
+            out << "  ";
+        }
+        return out << "}";
+    }
+    std::ostream& id::showListArgs(std::ostream& out, const std::vector<const std::type_info*>& list_args)
+    {
+        if (list_args.size() == 0) {
+            return out << "empty\n";
+        } else {
+            auto it = list_args.begin();
+            while (it != list_args.end() - 1) {
+                out << (*it)->name() << ", ";
+                it++;
+            }
+            return out << (*it)->name() << "\n";
+        }
+    }
+
+    void id::error_failed_indexing_out_range()
+    {
+        std::cout << "\nFailed indexing!\n";
+        std::cout << "Reason: Index out of array range!\n";
+        std::cout << "Please check size of array using `size()`\n";
+        std::exit(1);
+    }
+    void id::error_failed_indexing_not_array()
+    {
+        std::cout << "\nFailed indexing!\n";
+        std::cout << "Reason: This variable is not an array!\n";
+        std::cout << "Please use index zero, it will work\n";
+        std::exit(1);
+    }
+    void id::error_failed_call_different_args(const std::vector<const std::type_info*>& list_args)
+    {
+        std::cout << "\nFailed calling function!\n";
+        std::cout << "Reason: Different type of arguments passing!\n";
+        std::cout << "Arguments function: ";
+        id::showListArgs(std::cout, list_args);
+        std::exit(1);
+    }
+    void id::error_failed_call_not_match_count_args(const std::vector<const std::type_info*>& list_args)
+    {
+        std::cout << "\nFailed calling function!\n";
+        std::cout << "Reason: Count of arguments does not match!\n";
+        std::cout << "Arguments function: ";
+        id::showListArgs(std::cout, list_args);
+        std::exit(1);
+    }
+    void id::error_failed_call_unsupported_return_type()
+    {
+        std::cout << "\nFailed calling function!\n";
+        std::cout << "Reason: This variable is not a void function or a return function!\n";
+        std::cout << "Support return function: var (UniversalVariable). Please check using `isCallFunction()`\n";
+        std::exit(1);
+    }
+
+#ifdef UNIVERSAL_VARIABLE_EXPERIMENTAL_MODE
+    template<typename T> std::string id::to_string(const T& data)
+    {
+        id::str.str("");
+        if constexpr (md::is_bool_v<T> || md::is_symbol_v<T> || md::is_real_v<T> || md::is_text_v<T>)
+            id::str << data;
+        else if constexpr (md::is_pointer_v<T>)
+            id::str << std::hex << data;
+        else id::str << &data << "(" << typeid(data).name() << ")";
+        return id::str.str();
+    }
+    template<typename T> T get(const UniversalVariable& data)
+    {
+        if constexpr (md::is_real_v<T>) {
+            if (data._type == id::REAL) {
+                return static_cast<T>(std::get<id::REAL>(data._data));
+            } else if (data._type == id::TEXT) {
+                try {
+                    return static_cast<T>(std::stold(std::get<id::TEXT>(data._data)));
+                } catch (std::invalid_argument const& ex) {
+                    return static_cast<T>(0);
+                }
+            } else if (data._type == id::ARRAY) {
+                return get<T>(std::get<id::ARRAY>(data._data)[0]);
+            } else if (data._type == id::POINTER) {
+                return static_cast<T>(reinterpret_cast<uintptr_t>(std::get<id::POINTER>(data._data)));
+            } else id::error_failed_getting_not_match_type();
+        } else if constexpr (md::is_bool_v<T>) {
+            if (data._type == id::REAL) {
+                return static_cast<T>(std::get<id::REAL>(data._data));
+            } else if (data._type == id::TEXT) {
+                return std::get<id::TEXT>(data._data) == "true" || static_cast<T>(std::stold(std::get<id::TEXT>(data._data)));
+            } else if (data._type == id::ARRAY) {
+                return get<T>(std::get<id::ARRAY>(data._data)[0]);
+            } else if (data._type == id::POINTER) {
+                return static_cast<T>(reinterpret_cast<uintptr_t>(std::get<id::POINTER>(data._data)));
+            } else id::error_failed_getting_not_match_type();
+        } else if constexpr (md::is_symbol_v<T>) {
+            if (data._type == id::REAL) {
+                return id::to_string(std::get<id::REAL>(data._data))[0];
+            } else if (data._type == id::TEXT) {
+                return std::get<id::TEXT>(data._data)[0];
+            } else if (data._type == id::ARRAY) {
+                return get<T>(std::get<id::ARRAY>(data._data)[0]);
+            } else if (data._type == id::POINTER) {
+                return id::to_string(std::get<id::POINTER>(data._data))[0];
+            } else id::error_failed_getting_not_match_type();
+        } else if constexpr (md::is_std_text_v<T>) {
+            if (data._type == id::REAL) {
+                return id::to_string(std::get<id::REAL>(data._data));
+            } else if (data._type == id::TEXT) {
+                return std::get<id::TEXT>(data._data);
+            } else if (data._type == id::ARRAY) {
+                return get<T>(std::get<id::ARRAY>(data._data)[0]);
+            } else if (data._type == id::POINTER) {
+                return id::to_string(std::get<id::POINTER>(data._data));
+            } else id::error_failed_getting_not_match_type();
+        } else if constexpr (md::is_std_array_v<T>) {
+            return std::get<id::ARRAY>(data._data);
+        } else if constexpr (md::is_function_v<T> || md::is_pointer_v<T>) {
+            return static_cast<T>(std::get<id::POINTER>(data._data));
+        } else {
+            std::cout << "\nFailed getting value from variable!\n";
             std::exit(1);
         }
-        return 0;
+        return (T){0};
     }
-    bool isCallFunction()
+    void id::error_failed_getting_not_match_type()
     {
-        return __GET_FLAG(_flags, __IS_CALLABLE);
+        std::cout << "\nFailed getting value from variable!\n";
+        std::cout << "Reason: Not match type of variable!\n";
+        std::cout << "Please check type using `showType()`\n";
+        std::exit(1);
     }
-
+#endif
+}
 #pragma endregion
+#endif
 
-#pragma region all_data
-
-private:
-    //Info of UniversalVariable
-    unsigned char _flags = 0;
-    unsigned int _type;
-    unsigned int _unknown_type;
-    unsigned int _size_of_allocated_data = 0;
-
-    //Info of data
-    union { long double _real; void* _pointer; } _data;
-    std::string _text;
-    std::vector<UniversalVariable> _array;
-    void* _allocated_data;
-
-    //Info of data pointer callable function
-    unsigned int _count_args;
-    std::vector<const std::type_info*> _type_args = {  };
-    
-    //Access friend
-    friend std::ostream& operator<<(std::ostream& out, const UniversalVariable& variable);
-    friend std::ostream& operator<<(std::ostream& out, const std::vector<UniversalVariable>& data);
-
-#pragma endregion
-
-};
-
-#pragma region functions_for_universal_variable
-
-UniversalVariable operator "" _v(long double data)
+var test()
 {
-    return UniversalVariable(data);
-}
-UniversalVariable operator "" _v(unsigned long long int data)
-{
-    return UniversalVariable(data);
-}
-UniversalVariable operator "" _v(const char* str, std::size_t len)
-{
-    return UniversalVariable(str);
-}
-std::ostream& showHexData(std::ostream& out, const void* pointer, unsigned int size)
-{
-    __count_tab++;
-    out << "Data: {\n";
-
-    unsigned char hex[3]{};
-    unsigned int i = 0;
-    while (i < size) {
-        for (decltype(__count_tab) i = 0; i < __count_tab; i++)
-            out << "    ";
-        for (unsigned int j = 0; i < size, j < 4; i++, j++) {
-            hex[0] = (0xF & ((const char*)pointer)[i] >> 4) + 48;
-            hex[1] = (0xF & ((const char*)pointer)[i]) + 48;
-            if (hex[0] > 57) hex[0] += 7;
-            if (hex[1] > 57) hex[1] += 7;
-            out << hex;
-        }
-        out << ((i < size - 1) ? (",\n") : ("\n"));
-    }
-
-    __count_tab--;
-    for (decltype(__count_tab) i = 0; i < __count_tab; i++)
-        out << "    ";
-    out << "}";
-
-    return out;
-}
-std::ostream& operator<<(std::ostream& out, const UniversalVariable& variable)
-{
-    return (
-        (variable._type == __REAL) ? (out << variable._data._real) : 
-        (variable._type == __TEXT) ? (out << variable._text) : 
-        (variable._type == __ARRAY) ? (out << variable._array) :
-        (variable._type == __POINTER) ? (out << variable._data._pointer) :
-        (showHexData(out, variable._allocated_data, variable._size_of_allocated_data) << " (" << __type_names[variable._unknown_type]->name() << ")")
-    );
-}
-std::ostream& operator<<(std::ostream& out, const std::vector<UniversalVariable>& data)
-{
-    __count_tab++;
-    out << "List: {\n";
-
-    for (auto it = data.begin(); it != data.end(); it++) {
-        for (decltype(__count_tab) i = 0; i < __count_tab; i++)
-            out << "    ";
-        out << ((it->_type == __TEXT) ? ("\"") : (""))
-            << *it
-            << ((it->_type == __TEXT) ? ("\"") : (""))
-            << ((it != data.end() - 1) ? (",\n") : ("\n"));
-    }
-
-    __count_tab--;
-    for (decltype(__count_tab) i = 0; i < __count_tab; i++)
-        out << "    ";
-    out << "}";
-    
-    return out;
+    return "Hello world!";
 }
 
-#pragma endregion
-
-
-
-
-
-
-
-
-
-
-
-
-
-struct ManyInt
-{
+struct List {
     int a;
     int b;
-    int c;
-    int d; 
 };
 
 //MAIN
 int main()
 {
-    ManyInt value = { 0x12345678, 0x10101010, 0x00FFAA88, 96 };
+    List list = { 5, 10 };
 
-    var a = 5;
-    var b = { value };
-    a = b;
+    var Null;
+    var Array = { 0, 1, Null, 2, { "Text", Null, 4 }, 5 };
+    var CopyArray = Array[4];
+    var Real = Array[4][2];
+    var Copy = Null;
+    var Text = "true";
+    var Current = Array;
+    var Fun = test;
 
-    std::cout << a;
+    //TODO
+    //Indexing text as like array of characters
 
     return 0;
 }
