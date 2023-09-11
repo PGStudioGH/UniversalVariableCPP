@@ -2,7 +2,68 @@
 #define UNIVERSAL_VARIABLE_EXPERIMENTAL_MODE
 #define UNIVERSAL_VARIABLE_ONLY_HEADER
 
-#pragma GCC diagnostic ignored "-Wliteral-suffix"
+#pragma region check_compiler
+// O------------------------------------------------------------------------------O
+// | If the header support your compiler, you can use UniversalVariable           |
+// O------------------------------------------------------------------------------O
+#ifndef __cplusplus
+    #error Support only C++!
+#endif
+
+#undef CXX_MSC
+#undef CXX_CLANG
+#undef CXX_GNU
+#undef CXX_MAKE_VER
+
+#define CXX_MSC      0
+#define CXX_CLANG    0
+#define CXX_GNU      0
+#define CXX_MAKE_VER(MAJOR, MINOR, PATCH) ((MAJOR) * 10000000 + (MINOR) * 100000 + (PATCH))
+
+#if defined(_MSC_VER) && defined(_MSC_FULL_VER)
+    #undef CXX_MSC
+    #if _MSC_VER == _MSC_FULL_VER / 10000
+        #define CXX_MSC CXX_MAKE_VER(_MSC_VER / 100, _MSC_VER % 100, _MSC_FULL_VER % 10000)
+    #else
+        #define CXX_MSC CXX_MAKE_VER(_MSC_VER / 100, (_MSC_FULL_VER / 100000) % 100, _MSC_FULL_VER % 100000)
+    #endif
+#elif defined(__clang__) && defined(__clang_minor__)
+    #undef CXX_CLANG
+    #define CXX_CLANG CXX_MAKE_VER(__clang_major__, __clang_minor__, __clang_patchlevel__)
+#elif defined(__GNUC__) && defined(__GNUC_MINOR__) && defined(__GNUC_PATCHLEVEL__)
+    #undef CXX_GNU
+    #define CXX_GNU CXX_MAKE_VER(__GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__)
+#else
+    #error Alas, your compiler unsupported. Supported compilers: MSVC, Clang and GNU.
+#endif
+
+#if CXX_MSC
+    #if CXX_MSC < CXX_MAKE_VER(19, 15, 0)
+        #error Alas, your compiler is so old. Please update compiler. Supported version: v19.15 and newer.
+    #elif _MSVC_LANG < 201703L
+        #error Alas, your standart C++ unsupported. Supported standard C++: C++17 and newer.
+    #endif
+    #pragma warning(push)
+    #pragma warning(disable: 4455)
+#elif CXX_CLANG
+    #if CXX_CLANG < CXX_MAKE_VER(7, 0, 0)
+        #error Alas, your compiler is so old. Please update compiler. Supported version: 7.0.0 and newer.
+    #elif __cplusplus < 201703L
+        #error Alas, your standart C++ unsupported. Supported standard C++: C++17 and newer.
+    #endif
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wunused-comparison"
+    #pragma clang diagnostic ignored "-Wuser-defined-literals"
+#elif CXX_GNU
+    #if CXX_GNU < CXX_MAKE_VER(7, 1, 0)
+        #error Alas, your compiler is so old. Please update compiler. Supported version: 7.1 and newer.
+    #elif __cplusplus < 201703L
+        #error Alas, your standart C++ unsupported. Supported standard C++: C++17 and newer.
+    #endif
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wliteral-suffix"
+#endif
+#pragma endregion
 
 #pragma region std_includes
 // O------------------------------------------------------------------------------O
@@ -10,8 +71,8 @@
 // O------------------------------------------------------------------------------O
 #include <vector>
 #include <variant>
-#include <iomanip>
 #include <cstring>
+#include <sstream>
 #include <iostream>
 #include <stdint.h>
 #include <typeinfo>
@@ -165,7 +226,7 @@ namespace uv
         template<typename T> inline constexpr bool is_symbol_v =
             is_same_type_v<T, char, unsigned char>;
         template<typename T> inline constexpr bool is_real_v =
-            is_arithmetic_v<T> && not is_bool_v<T> && not is_symbol_v<T>;
+            is_arithmetic_v<T> && !is_bool_v<T> && !is_symbol_v<T>;
         template<typename T> inline constexpr bool is_text_v =
             is_same_type_v<T, char[sizeof(get_type_return_t<T>)], const char*>;
         template<typename T> inline constexpr bool is_std_text_v =
@@ -450,7 +511,7 @@ namespace uv
         case id::POINTER:
             return out << std::get<id::POINTER>(variable._data);
         default:
-            out << id::showHexData(out, std::get<id::POINTER>(variable._data), variable._size_of_allocated_data);
+            id::showHexData(out, std::get<id::POINTER>(variable._data), variable._size_of_allocated_data);
             return out << " (" << id::list_types[variable._type_from_list_types]->name() << ")";
         }
     }
@@ -612,7 +673,6 @@ namespace uv
             std::cout << "\nFailed getting value from variable!\n";
             std::exit(1);
         }
-        return (T){0};
     }
     void id::error_failed_getting_not_match_type()
     {
@@ -625,6 +685,24 @@ namespace uv
 }
 #pragma endregion
 #endif
+
+#if CXX_MSC
+    #pragma warning(pop)
+#elif CXX_CLANG
+    #pragma clang diagnostic pop
+#elif CXX_GNU
+    #pragma GCC diagnostic pop
+#endif
+
+#undef CXX_MSC
+#undef CXX_CLANG
+#undef CXX_GNU
+#undef CXX_MAKE_VER
+
+
+
+
+
 
 var test()
 {
@@ -652,6 +730,10 @@ int main()
 
     //TODO
     //Indexing text as like array of characters
+
+    Array[4][0] = list;
+
+    std::cout << Array;
 
     return 0;
 }
