@@ -1,5 +1,3 @@
-//Hello, remove me
-
 // HEADER
 #define UNIVERSAL_VARIABLE_EXPERIMENTAL_MODE
 #define UNIVERSAL_VARIABLE_ONLY_HEADER
@@ -543,7 +541,7 @@ namespace uv
             for (size_uv i = 0; i < id::count_indent; i++) {
                 out << "  ";
             }
-            for (unsigned int j = 0; i < size, j < 4; i++, j++) {
+            for (unsigned int j = 0; i < size && j < 4; i++, j++) {
                 hex[0] = (0xF & ((const char*)pointer)[i] >> 4) + 48;
                 hex[1] = (0xF & ((const char*)pointer)[i]) + 48;
                 if (hex[0] > 57) hex[0] += 7;
