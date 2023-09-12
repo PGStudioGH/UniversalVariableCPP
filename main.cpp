@@ -2,7 +2,7 @@
 #define UNIVERSAL_VARIABLE_EXPERIMENTAL_MODE
 #define UNIVERSAL_VARIABLE_ONLY_HEADER
 
-//TODO need ignore warning about non-return in return function
+//TODO need create methods operator +, -, *, /, ++, --, +=, -=, *=, /=
 
 #pragma region check_compiler
 // O------------------------------------------------------------------------------O
@@ -56,7 +56,6 @@
   #endif
   #pragma clang diagnostic push
   #pragma clang diagnostic ignored "-Wreturn-type"
-  #pragma clang diagnostic ignored "-Wunused-comparison"
   #pragma clang diagnostic ignored "-Wuser-defined-literals"
 #elif CXX_GNU
   #if CXX_GNU < CXX_MAKE_VER(7, 1, 0)
@@ -96,10 +95,6 @@ namespace uv
 
   class UniversalVariable;
 
-  UniversalVariable operator "" v(long double data);
-  UniversalVariable operator "" v(unsigned long long int data);
-  UniversalVariable operator "" v(const char* str, std::size_t len);
-
   void printType(const UniversalVariable& variable);
   std::ostream& operator<<(std::ostream& out, const UniversalVariable& variable);
   std::ostream& operator<<(std::ostream& out, const std::vector<UniversalVariable>& array);
@@ -110,7 +105,8 @@ namespace uv
 
   namespace metaprogramming_declaration
   {
-    using supported_types = std::variant<long double, std::string, std::vector<UniversalVariable>, void*>;
+    using format_character = char;
+    using supported_types = std::variant<long double, std::basic_string<format_character>, std::vector<UniversalVariable>, void*>;
   }
 
   // O------------------------------------------------------------------------------O
@@ -128,11 +124,17 @@ namespace uv
   public:
     bool isSameType(const UniversalVariable& variable);
     template<typename T> bool isSameType(const T& data);
+
   public:
     UniversalVariable& operator=(const UniversalVariable& variable);
     template<typename T> UniversalVariable& operator=(const T& data);
 
   public:
+    UniversalVariable& toString();
+    UniversalVariable& toNumber();
+
+  public:
+    metaprogramming_declaration::format_character& fromChar(size_uv index);
     UniversalVariable& operator[](size_uv index);
     size_uv size();
 
@@ -167,6 +169,9 @@ namespace uv
 }
 
 typedef class uv::UniversalVariable var;
+uv::UniversalVariable v(long double data);
+uv::UniversalVariable v(unsigned long long int data);
+uv::UniversalVariable v(const char* str);
 #pragma endregion
 
 #ifdef UNIVERSAL_VARIABLE_ONLY_HEADER
@@ -189,24 +194,27 @@ namespace uv
       IS_CALLABLE_FUNCTION = 0x01,
       IS_RETURN_FUNCTION   = 0x02,
     };
+
+    static std::stringstream str;
     static size_uv index_arg = 0;
     static bool is_same_type_arg = 0;
     static std::vector<const std::type_info*> list_types = { };
-
     static size_uv count_indent = 0;
-
+    
+    template<typename T> std::string to_string(const T& data);
     std::ostream& showHexData(std::ostream& out, const void* pointer, unsigned int size);
     std::ostream& showListArgs(std::ostream& out, const std::vector<const std::type_info*>& list_args);
 
+    void error_failed_converting_not_text();
+    void error_failed_converting_not_number();
     void error_failed_indexing_out_range();
+    void error_failed_indexing_not_text();
     void error_failed_indexing_not_array();
     void error_failed_call_different_args(const std::vector<const std::type_info*>& list_args);
     void error_failed_call_not_match_count_args(const std::vector<const std::type_info*>& list_args);
     void error_failed_call_unsupported_return_type();
 
   #ifdef UNIVERSAL_VARIABLE_EXPERIMENTAL_MODE
-    std::stringstream str;
-    template<typename T> std::string to_string(const T& data);
     void error_failed_getting_not_match_type();
   #endif
   }
@@ -342,7 +350,8 @@ namespace uv
       this->_data = temp;
     } else if constexpr (md::is_symbol_v<T> || md::is_text_v<T> || md::is_std_text_v<T>) {
       this->_type = id::TEXT;
-      std::variant_alternative_t<id::TEXT, md::supported_types> temp = data;
+      std::variant_alternative_t<id::TEXT, md::supported_types> temp = "";
+      temp += data;
       this->_data = temp;
     } else if constexpr (md::is_array_v<T>) {
       this->_type = id::ARRAY;
@@ -391,9 +400,50 @@ namespace uv
     return *this;
   }
 
+  UniversalVariable& UniversalVariable::toNumber()
+  {
+    if (this->_type == id::TEXT) {
+      this->_type = id::REAL;
+      std::variant_alternative_t<id::REAL, md::supported_types> temp = 0;
+      try {
+        temp = std::stold(std::get<id::TEXT>(this->_data));
+      } catch (std::invalid_argument const& ex) {
+        if (std::get<id::TEXT>(this->_data) == "true") {
+          temp = 1;
+        }
+      }
+      this->_data = temp;
+    } else if (this->_type != id::REAL) {
+      id::error_failed_converting_not_text();
+    }
+    return *this;
+  }
+  UniversalVariable& UniversalVariable::toString()
+  {
+    if (this->_type == id::REAL) {
+      this->_type = id::TEXT;
+      this->_data = id::to_string(std::get<id::REAL>(this->_data));
+    } else if (this->_type != id::TEXT) {
+      id::error_failed_converting_not_number();
+    }
+    return *this;
+  }
+
+  md::format_character& UniversalVariable::fromChar(size_uv index)
+  {
+    if (this->_type == id::TEXT) {
+      if (index < std::get<id::TEXT>(this->_data).size()) {
+        return std::get<id::TEXT>(this->_data)[index];
+      } else {
+        id::error_failed_indexing_out_range();
+      }
+    } else {
+      id::error_failed_indexing_not_text();
+    }
+  }
   UniversalVariable& UniversalVariable::operator[](size_uv index)
   {
-    if (this->_type == id::ARRAY || this->_type == id::TEXT) {
+    if (this->_type == id::ARRAY) {
       if (index < std::get<id::ARRAY>(this->_data).size()) {
         return std::get<id::ARRAY>(this->_data)[index];
       } else {
@@ -407,7 +457,9 @@ namespace uv
   }
   size_uv UniversalVariable::size()
   {
-    if (this->_type == id::ARRAY) {
+    if (this->_type == id::TEXT) {
+      return std::get<id::TEXT>(this->_data).size();
+    } else if (this->_type == id::ARRAY) {
       return std::get<id::ARRAY>(this->_data).size();
     } else {
       return 1;
@@ -466,19 +518,6 @@ namespace uv
     }
   }
 
-  UniversalVariable operator "" v(long double data)
-  {
-    return UniversalVariable(data);
-  }
-  UniversalVariable operator "" v(unsigned long long int data)
-  {
-    return UniversalVariable(data);
-  }
-  UniversalVariable operator "" v(const char* str, std::size_t len)
-  {
-    return UniversalVariable(str);
-  }
-
   void printType(const UniversalVariable& variable)
   {
     std::cout << "\nThis variable is ";
@@ -531,6 +570,17 @@ namespace uv
     }
     return out << "]";
   }
+
+  template<typename T> std::string id::to_string(const T& data)
+  {
+    id::str.str("");
+    if constexpr (md::is_bool_v<T> || md::is_symbol_v<T> || md::is_real_v<T> || md::is_text_v<T>)
+      id::str << data;
+    else if constexpr (md::is_pointer_v<T>)
+      id::str << std::hex << data;
+    else id::str << &data << "(" << typeid(data).name() << ")";
+    return id::str.str();
+  }
   std::ostream& id::showHexData(std::ostream& out, const void* pointer, unsigned int size)
   {
     id::count_indent++;
@@ -571,11 +621,32 @@ namespace uv
     }
   }
 
+  void id::error_failed_converting_not_text()
+  {
+    std::cout << "\nFailed converting!\n";
+    std::cout << "Reason: This variable is not an text!\n";
+    std::cout << "Please check type using `printType(var)`\n";
+    std::exit(1);
+  }
+  void id::error_failed_converting_not_number()
+  {
+    std::cout << "\nFailed converting!\n";
+    std::cout << "Reason: This variable is not an number!\n";
+    std::cout << "Please check type using `printType(var)`\n";
+    std::exit(1);
+  }
   void id::error_failed_indexing_out_range()
   {
     std::cout << "\nFailed indexing!\n";
-    std::cout << "Reason: Index out of array range!\n";
-    std::cout << "Please check size of array using `size()`\n";
+    std::cout << "Reason: Index out of range!\n";
+    std::cout << "Please check size of variable using `size()`\n";
+    std::exit(1);
+  }
+  void id::error_failed_indexing_not_text()
+  {
+    std::cout << "\nFailed indexing!\n";
+    std::cout << "Reason: This variable is not an text!\n";
+    std::cout << "If is number, you can convert to text using `toString()`\n";
     std::exit(1);
   }
   void id::error_failed_indexing_not_array()
@@ -610,16 +681,6 @@ namespace uv
   }
 
 #ifdef UNIVERSAL_VARIABLE_EXPERIMENTAL_MODE
-  template<typename T> std::string id::to_string(const T& data)
-  {
-    id::str.str("");
-    if constexpr (md::is_bool_v<T> || md::is_symbol_v<T> || md::is_real_v<T> || md::is_text_v<T>)
-      id::str << data;
-    else if constexpr (md::is_pointer_v<T>)
-      id::str << std::hex << data;
-    else id::str << &data << "(" << typeid(data).name() << ")";
-    return id::str.str();
-  }
   template<typename T> T get(const UniversalVariable& data)
   {
     if constexpr (md::is_real_v<T>) {
@@ -684,6 +745,19 @@ namespace uv
   }
 #endif
 }
+
+uv::UniversalVariable v(long double data)
+{
+  return uv::UniversalVariable(data);
+}
+uv::UniversalVariable v(unsigned long long int data)
+{
+  return uv::UniversalVariable(data);
+}
+uv::UniversalVariable v(const char* str)
+{
+  return uv::UniversalVariable(str);
+}
 #pragma endregion
 #endif
 
@@ -703,11 +777,9 @@ namespace uv
 
 
 
-
-
-var test()
+var test(int year)
 {
-  return "Hello world!";
+  return v("02468...Hello world from 2023!");
 }
 
 struct List {
@@ -721,17 +793,18 @@ int main()
   List list = { 0x7FFFFFFF, 123456789 };
 
   var Null;
-  var Array = { 0, 1, Null, 2, { "Text", Null, 4 }, 5 };
+  var Array = { 0, 1, Null, 22151, { "Text", Null, 4 }, 5 };
   var CopyArray = Array[4];
   var Real = Array[4][2];
-  var Copy = Null;
-  var Text = "true";
+  var Text = true;
   var Current = Array;
   var Fun = test;
 
+  (Array[4][2] = Array[3].toString()).fromChar(2) = '9';
   Array[4][0] = list;
+  Array[4][1] = Text.toNumber();
 
-  std::cout << Array << "\n";
+  std::cout << (Array[5] = Fun)(2023).toNumber() << "\n" << Array;
 
   return 0;
 }
