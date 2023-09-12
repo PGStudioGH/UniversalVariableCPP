@@ -2,6 +2,8 @@
 #define UNIVERSAL_VARIABLE_EXPERIMENTAL_MODE
 #define UNIVERSAL_VARIABLE_ONLY_HEADER
 
+//TODO need ignore warning about non-return in return function
+
 #pragma region check_compiler
 // O------------------------------------------------------------------------------O
 // | If the header support your compiler, you can use UniversalVariable           |
@@ -62,6 +64,7 @@
     #error Alas, your standart C++ unsupported. Supported standard C++: C++17 and newer.
   #endif
   #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wreturn-type"
   #pragma GCC diagnostic ignored "-Wliteral-suffix"
 #endif
 #pragma endregion
