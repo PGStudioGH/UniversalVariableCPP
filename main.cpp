@@ -804,7 +804,7 @@ int main()
   Array[4][0] = list;
   Array[4][1] = Text.toNumber();
 
-  std::cout << (Array[5] = Fun)(2023).toNumber() << "\n" << Array;
+  std::cout << (Array[5] = Fun)(2023).toNumber() << '\n' << Array << '\n';
 
   return 0;
 }
