@@ -47,6 +47,7 @@
   #endif
   #pragma warning(push)
   #pragma warning(disable: 4455)
+  #pragma warning(disable: 4715)
 #elif CXX_CLANG
   #if CXX_CLANG < CXX_MAKE_VER(7, 0, 0)
     #error Alas, your compiler is so old. Please update compiler. Supported version: 7.0.0 and newer.
