@@ -591,15 +591,14 @@ namespace uv
       for (size_uv i = 0; i < id::count_indent; i++) {
         out << "  ";
       }
-      out << "0x";
-      for (unsigned int j = 0; i < size && j < 4; i++, j++) {
+      for (unsigned int j = 0; i < size && j < 8; i++, j++) {
         hex[0] = (0xF & ((const char*)pointer)[i] >> 4) + 48;
         hex[1] = (0xF & ((const char*)pointer)[i]) + 48;
         if (hex[0] > 57) hex[0] += 7;
         if (hex[1] > 57) hex[1] += 7;
-        out << hex;
+        out << hex << ' ';
       }
-      out << ((i < size - 1) ? (",\n") : ("\n"));
+      out << '\n';
     }
     id::count_indent--;
     for (size_uv i = 0; i < id::count_indent; i++) {
@@ -785,12 +784,13 @@ var test(int year)
 struct List {
   int a;
   int b;
+  int c;
 };
 
 //MAIN
 int main()
 {
-  List list = { 0x7FFFFFFF, 123456789 };
+  List list = { 0x7FFFFFFF, sizeof(var), 123456789 };
 
   var Null;
   var Array = { 0, 1, Null, 22151, { "Text", Null, 4 }, 5 };
