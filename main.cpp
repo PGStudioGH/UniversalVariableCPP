@@ -91,8 +91,6 @@
 #pragma region uv_declaration
 namespace uv
 {
-  typedef std::size_t size_uv;
-
   class UniversalVariable;
 
   void printType(const UniversalVariable& variable);
@@ -105,9 +103,13 @@ namespace uv
 
   namespace metaprogramming_declaration
   {
+    using size_uv = std::size_t;
     using format_character = char;
+    using flag_type = unsigned int;
     using supported_types = std::variant<long double, std::basic_string<format_character>, std::vector<UniversalVariable>, void*>;
   }
+
+  namespace md = metaprogramming_declaration;
 
   // O------------------------------------------------------------------------------O
   // | uv::UniversalVariable - A dynamic and implicit typing variable               |
@@ -134,9 +136,9 @@ namespace uv
     UniversalVariable& toNumber();
 
   public:
-    metaprogramming_declaration::format_character& fromChar(size_uv index);
-    UniversalVariable& operator[](size_uv index);
-    size_uv size();
+    md::format_character& fromChar(md::size_uv index);
+    UniversalVariable& operator[](md::size_uv index);
+    md::size_uv size();
 
   public:
     bool isCallable();
@@ -149,13 +151,13 @@ namespace uv
     template<typename First, typename... Rest> void _readArgs(First first, Rest... rest);
 
   public:
-    unsigned int _flags = 0;
-    size_uv _type;
-    size_uv _type_from_list_types;
-    size_uv _size_of_allocated_data = 0;
-    metaprogramming_declaration::supported_types _data;
+    md::flag_type _flags = 0;
+    md::size_uv _type;
+    md::size_uv _type_from_list_types;
+    md::size_uv _size_of_allocated_data = 0;
+    md::supported_types _data;
 
-    size_uv _count_args;
+    md::size_uv _count_args;
     std::vector<const std::type_info*> _list_args;
 
     friend void printType(const UniversalVariable& variable);
@@ -196,10 +198,10 @@ namespace uv
     };
 
     static std::stringstream str;
-    static size_uv index_arg = 0;
+    static metaprogramming_declaration::size_uv index_arg = 0;
     static bool is_same_type_arg = 0;
     static std::vector<const std::type_info*> list_types = { };
-    static size_uv count_indent = 0;
+    static metaprogramming_declaration::size_uv count_indent = 0;
     
     template<typename T> std::string to_string(const T& data);
     std::ostream& showHexData(std::ostream& out, const void* pointer, unsigned int size);
@@ -220,8 +222,8 @@ namespace uv
   }
   namespace metaprogramming_declaration
   {
-    inline bool getFlag(unsigned int flags, unsigned int flag) { return flags & flag; }
-    inline void setFlag(unsigned int& flags, unsigned int flag, bool toggle) { toggle ? flags |= flag : flags &= ~flag; }
+    inline bool getFlag(flag_type& flags, const flag_type& flag) { return flags & flag; }
+    inline void setFlag(flag_type& flags, const flag_type& flag, const bool& toggle) { toggle ? flags |= flag : flags &= ~flag; }
 
     template<typename T, typename... Args> struct is_same_type : std::bool_constant<(std::is_same_v<T, Args> || ...)> {};
     template<typename T, typename... Args> inline constexpr bool is_same_type_v = is_same_type<T, Args...>::value;
@@ -357,7 +359,7 @@ namespace uv
       this->_type = id::ARRAY;
       std::variant_alternative_t<id::ARRAY, md::supported_types> temp = { };
       this->_data = temp;
-      for (size_uv i = 0; i < sizeof(T) / sizeof(std::remove_extent_t<T>); i++) {
+      for (md::size_uv i = 0; i < sizeof(T) / sizeof(std::remove_extent_t<T>); i++) {
         std::get<id::ARRAY>(this->_data).push_back(data[i]);
       }
     } else if constexpr (md::is_std_array_v<T>) {
@@ -429,7 +431,7 @@ namespace uv
     return *this;
   }
 
-  md::format_character& UniversalVariable::fromChar(size_uv index)
+  md::format_character& UniversalVariable::fromChar(md::size_uv index)
   {
     if (this->_type == id::TEXT) {
       if (index < std::get<id::TEXT>(this->_data).size()) {
@@ -441,7 +443,7 @@ namespace uv
       id::error_failed_indexing_not_text();
     }
   }
-  UniversalVariable& UniversalVariable::operator[](size_uv index)
+  UniversalVariable& UniversalVariable::operator[](md::size_uv index)
   {
     if (this->_type == id::ARRAY) {
       if (index < std::get<id::ARRAY>(this->_data).size()) {
@@ -455,7 +457,7 @@ namespace uv
       id::error_failed_indexing_not_array();
     }
   }
-  size_uv UniversalVariable::size()
+  md::size_uv UniversalVariable::size()
   {
     if (this->_type == id::TEXT) {
       return std::get<id::TEXT>(this->_data).size();
@@ -559,13 +561,13 @@ namespace uv
     id::count_indent++;
     out << "List (" << data.size() << " elements): [\n";
     for (auto it = data.begin(); it != data.end(); it++) {
-      for (size_uv i = 0; i < id::count_indent; i++) {
+      for (md::size_uv i = 0; i < id::count_indent; i++) {
         out << "  ";
       }
       out << ((it->_type == id::TEXT) ? ("\"") : ("")) << *it << ((it->_type == id::TEXT) ? ("\"") : ("")) << ((it != data.end() - 1) ? (",\n") : ("\n"));
     }
     id::count_indent--;
-    for (size_uv i = 0; i < id::count_indent; i++) {
+    for (md::size_uv i = 0; i < id::count_indent; i++) {
       out << "  ";
     }
     return out << "]";
@@ -588,7 +590,7 @@ namespace uv
     unsigned char hex[3]{};
     unsigned int i = 0;
     while (i < size) {
-      for (size_uv i = 0; i < id::count_indent; i++) {
+      for (md::size_uv i = 0; i < id::count_indent; i++) {
         out << "  ";
       }
       for (unsigned int j = 0; i < size && j < 8; i++, j++) {
@@ -601,7 +603,7 @@ namespace uv
       out << '\n';
     }
     id::count_indent--;
-    for (size_uv i = 0; i < id::count_indent; i++) {
+    for (md::size_uv i = 0; i < id::count_indent; i++) {
       out << "  ";
     }
     return out << "}";
@@ -804,7 +806,7 @@ int main()
   Array[4][0] = list;
   Array[4][1] = Text.toNumber();
 
-  std::cout << (Array[5] = Fun)(2023).toNumber() << '\n' << Array << '\n';
+  std::cout << (Array[5] = Fun)(2023).toNumber() << "\n" << Array << "\n";
 
   return 0;
 }
