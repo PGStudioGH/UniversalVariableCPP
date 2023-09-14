@@ -2,6 +2,9 @@
 #define UNIVERSAL_VARIABLE_EXPERIMENTAL_MODE
 #define UNIVERSAL_VARIABLE_ONLY_HEADER
 
+//TODO need upgrade index operator (get reference to character from string and element from array).
+//I think, add new type POINTER_TO_CHARACTER and POINTER_TO_UNIVERSALVARIABLE.
+
 //TODO need create methods operator +, -, *, /, ++, --, +=, -=, *=, /=
 
 #pragma region check_compiler
