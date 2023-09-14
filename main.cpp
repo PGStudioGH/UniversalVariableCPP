@@ -46,7 +46,6 @@
     #error Alas, your standart C++ unsupported. Supported standard C++: C++17 and newer.
   #endif
   #pragma warning(push)
-  #pragma warning(disable: 4455)
   #pragma warning(disable: 4715)
 #elif CXX_CLANG
   #if CXX_CLANG < CXX_MAKE_VER(7, 0, 0)
@@ -56,7 +55,6 @@
   #endif
   #pragma clang diagnostic push
   #pragma clang diagnostic ignored "-Wreturn-type"
-  #pragma clang diagnostic ignored "-Wuser-defined-literals"
 #elif CXX_GNU
   #if CXX_GNU < CXX_MAKE_VER(7, 1, 0)
     #error Alas, your compiler is so old. Please update compiler. Supported version: 7.1 and newer.
@@ -65,7 +63,6 @@
   #endif
   #pragma GCC diagnostic push
   #pragma GCC diagnostic ignored "-Wreturn-type"
-  #pragma GCC diagnostic ignored "-Wliteral-suffix"
 #endif
 #pragma endregion
 
